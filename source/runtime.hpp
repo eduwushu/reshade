@@ -28,6 +28,47 @@ namespace reshade
 	struct texture;
 	struct technique;
 
+	struct runtime_config
+	{
+		bool _force_shortcut_modifiers = true;
+		unsigned int _effects_key_data[4] = {};
+#if RESHADE_FX
+		bool _no_debug_info = 0;
+		bool _no_effect_cache = false;
+		bool _no_reload_on_init = false;
+		bool _no_reload_for_non_vr = false;
+		bool _performance_mode = false;
+		bool _effect_load_skipping = false;
+		unsigned int _reload_key_data[4] = {};
+		unsigned int _performance_mode_key_data[4] = {};
+		std::vector<std::string> _global_preprocessor_definitions;
+		std::filesystem::path _intermediate_cache_path;
+		std::vector<std::filesystem::path> _effect_search_paths = { L".\\" };
+		std::vector<std::filesystem::path> _texture_search_paths = { L".\\" };
+		bool _screenshot_save_before = false;
+		bool _screenshot_include_preset = false;
+#endif
+#if RESHADE_GUI
+		bool _screenshot_save_gui = false;
+#endif
+		bool _screenshot_clear_alpha = true;
+		unsigned int _screenshot_format = 1;
+		unsigned int _screenshot_jpeg_quality = 90;
+		unsigned int _screenshot_key_data[4] = {};
+		std::filesystem::path _screenshot_path;
+		std::string _screenshot_name = "%AppName% %Date% %Time%";
+		std::filesystem::path _screenshot_post_save_command;
+		std::string _screenshot_post_save_command_arguments = "\"%TargetPath%\"";
+		std::filesystem::path _screenshot_post_save_command_working_directory;
+		bool _screenshot_post_save_command_no_window = false;
+#if RESHADE_FX
+		unsigned int _prev_preset_key_data[4] = {};
+		unsigned int _next_preset_key_data[4] = {};
+		unsigned int _preset_transition_delay = 1000;
+		std::filesystem::path _current_preset_path;
+#endif
+	};
+
 	/// <summary>
 	/// The main ReShade post-processing effect runtime.
 	/// </summary>
@@ -264,6 +305,11 @@ namespace reshade
 		api::format  _back_buffer_format = api::format::unknown;
 		bool _is_vr = false;
 
+		bool _is_config_owner = false;
+		static void *HWnd;
+		static runtime_config _config;
+		static bool _vr_needs_preset_reload;
+
 	private:
 		static bool check_for_update(unsigned long latest_version[3]);
 
@@ -338,8 +384,7 @@ namespace reshade
 		bool _effects_rendered_this_frame = false;
 
 		bool _ignore_shortcuts = false;
-		bool _force_shortcut_modifiers = true;
-		unsigned int _effects_key_data[4] = {};
+		
 		std::shared_ptr<class input> _input;
 
 		std::chrono::high_resolution_clock::duration _last_frame_duration;
@@ -354,21 +399,8 @@ namespace reshade
 
 		#pragma region Effect Loading
 #if RESHADE_FX
-		bool _no_debug_info = 0;
-		bool _no_effect_cache = false;
-		bool _no_reload_on_init = false;
-		bool _no_reload_for_non_vr = false;
-		bool _performance_mode = false;
-		bool _effect_load_skipping = false;
 		bool _load_option_disable_skipping = false;
-		unsigned int _reload_key_data[4] = {};
-		unsigned int _performance_mode_key_data[4] = {};
-		std::vector<std::string> _global_preprocessor_definitions;
 		std::vector<std::string> _preset_preprocessor_definitions;
-		std::filesystem::path _intermediate_cache_path;
-		std::vector<std::filesystem::path> _effect_search_paths;
-		std::vector<std::filesystem::path> _texture_search_paths;
-
 		std::atomic<bool> _last_reload_successfull = true;
 		bool _textures_loaded = false;
 		bool _last_texture_reload_successfull = true;
@@ -409,24 +441,6 @@ namespace reshade
 		#pragma endregion
 
 		#pragma region Screenshot
-#if RESHADE_FX
-		bool _screenshot_save_before = false;
-		bool _screenshot_include_preset = false;
-#endif
-#if RESHADE_GUI
-		bool _screenshot_save_gui = false;
-#endif
-		bool _screenshot_clear_alpha = true;
-		unsigned int _screenshot_format = 1;
-		unsigned int _screenshot_jpeg_quality = 90;
-		unsigned int _screenshot_key_data[4] = {};
-		std::filesystem::path _screenshot_path;
-		std::string _screenshot_name;
-		std::filesystem::path _screenshot_post_save_command;
-		std::string _screenshot_post_save_command_arguments;
-		std::filesystem::path _screenshot_post_save_command_working_directory;
-		bool _screenshot_post_save_command_no_window = false;
-
 		bool _should_save_screenshot = false;
 		std::atomic<bool> _last_screenshot_save_successfull = true;
 		bool _screenshot_directory_creation_successfull = true;
@@ -436,11 +450,6 @@ namespace reshade
 
 		#pragma region Preset Switching
 #if RESHADE_FX
-		unsigned int _prev_preset_key_data[4] = {};
-		unsigned int _next_preset_key_data[4] = {};
-		unsigned int _preset_transition_delay = 1000;
-		std::filesystem::path _current_preset_path;
-
 		bool _is_in_between_presets_transition = false;
 		std::chrono::high_resolution_clock::time_point _last_preset_switching_time;
 #endif

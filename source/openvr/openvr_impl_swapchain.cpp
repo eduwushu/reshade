@@ -76,7 +76,6 @@ bool reshade::openvr::swapchain_impl::on_init()
 #if RESHADE_ADDON
 	invoke_addon_event<addon_event::init_swapchain>(this);
 #endif
-
 	return runtime::on_init(nullptr);
 }
 void reshade::openvr::swapchain_impl::on_reset()

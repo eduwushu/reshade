@@ -53,6 +53,8 @@ bool reshade::d3d10::swapchain_impl::on_init()
 	if (FAILED(_orig->GetDesc(&swap_desc)))
 		return false;
 
+	HWnd = swap_desc.OutputWindow;
+
 	// Get back buffer texture
 	if (FAILED(_orig->GetBuffer(0, IID_PPV_ARGS(&_backbuffer))))
 		return false;

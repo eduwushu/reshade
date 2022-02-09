@@ -13,7 +13,7 @@
 extern HMODULE g_module_handle;
 static std::shared_mutex s_windows_mutex;
 static std::unordered_map<HWND, unsigned int> s_raw_input_windows;
-static std::unordered_map<HWND, std::weak_ptr<reshade::input>> s_windows;
+static std::unordered_map<HWND, std::pair<std::weak_ptr<reshade::input>, std::weak_ptr<reshade::input>>> s_windows; //Second input of the pair corresponds to the VR input class, if any present
 
 reshade::input::input(window_handle window)
 	: _window(window)
@@ -55,24 +55,26 @@ std::shared_ptr<reshade::input> reshade::input::register_window(window_handle wi
 
 	const std::unique_lock<std::shared_mutex> lock(s_windows_mutex);
 
-	const auto insert = s_windows.emplace(static_cast<HWND>(window), std::weak_ptr<input>());
+	auto it = s_windows.find(static_cast<HWND>(window));
+	if (it == s_windows.end())
+		s_windows.emplace(static_cast<HWND>(window), std::pair<std::weak_ptr<input>, std::weak_ptr<input>>());
 
-	if (insert.second || insert.first->second.expired())
-	{
+	it = s_windows.find(static_cast<HWND>(window));
+
+	assert(it != s_windows.end());
+
 #if RESHADE_VERBOSE_LOG
-		LOG(DEBUG) << "Starting input capture for window " << window << " ...";
+	LOG(DEBUG) << "Starting input capture for window " << window << " ...";
 #endif
 
-		const auto instance = std::make_shared<input>(window);
+	const auto instance = std::make_shared<input>(window);
 
-		insert.first->second = instance;
-
-		return instance;
-	}
+	if (it->second.first.expired())
+		it->second.first = instance;
 	else
-	{
-		return insert.first->second.lock();
-	}
+		it->second.second = instance;
+
+	return instance;
 }
 
 bool reshade::input::handle_window_message(const void *message_data)
@@ -93,10 +95,12 @@ bool reshade::input::handle_window_message(const void *message_data)
 
 	// Remove any expired entry from the list
 	for (auto it = s_windows.begin(); it != s_windows.end();)
-		if (it->second.expired())
+	{
+		if (it->second.first.expired())
 			it = s_windows.erase(it);
 		else
-			++it;
+			it++;
+	}
 
 	// Look up the window in the list of known input windows
 	auto input_window = s_windows.find(details.hwnd);
@@ -122,13 +126,14 @@ bool reshade::input::handle_window_message(const void *message_data)
 	{
 		// Reroute this raw input message to the window with the most rendering
 		input_window = std::max_element(s_windows.begin(), s_windows.end(),
-			[](auto lhs, auto rhs) { return lhs.second.lock()->_frame_count < rhs.second.lock()->_frame_count; });
+			[](auto lhs, auto rhs) { return lhs.second.first.lock()->_frame_count < rhs.second.first.lock()->_frame_count; });
 	}
 
 	if (input_window == s_windows.end())
 		return false;
 
-	const std::shared_ptr<input> input = input_window->second.lock();
+	const std::shared_ptr<input> vrinput = input_window->second.second.lock();
+	const std::shared_ptr<input> input = input_window->second.first.lock();
 	// It may happen that the input was destroyed between the removal of expired entries above and here, so need to abort in this case
 	if (input == nullptr)
 		return false;
@@ -201,19 +206,27 @@ bool reshade::input::handle_window_message(const void *message_data)
 
 			// Filter out prefix messages without a key code
 			if (raw_data.data.keyboard.VKey < 0xFF)
+			{
 				input->_keys[raw_data.data.keyboard.VKey] = (raw_data.data.keyboard.Flags & RI_KEY_BREAK) == 0 ? 0x88 : 0x08,
 				input->_keys_time[raw_data.data.keyboard.VKey] = details.time;
+				vrinput->_keys[raw_data.data.keyboard.VKey] = (raw_data.data.keyboard.Flags & RI_KEY_BREAK) == 0 ? 0x88 : 0x08,
+				vrinput->_keys_time[raw_data.data.keyboard.VKey] = details.time;
+			}
 
 			// No 'WM_CHAR' messages are sent if legacy keyboard messages are disabled, so need to generate text input manually here
 			// Cannot use the ToUnicode function always as it seems to reset dead key state and thus calling it can break subsequent application input, should be fine here though since the application is already explicitly using raw input
 			// Since Windows 10 version 1607 this supports the 0x2 flag, which prevents the keyboard state from being changed, so it is not a problem there anymore either way
 			if (WCHAR ch[3] = {}; (raw_data.data.keyboard.Flags & RI_KEY_BREAK) == 0 && ToUnicode(raw_data.data.keyboard.VKey, raw_data.data.keyboard.MakeCode, input->_keys, ch, 2, 0x2))
+			{
 				input->_text_input += ch;
+				vrinput->_text_input += ch;
+			}
 			break;
 		}
 		break;
 	case WM_CHAR:
 		input->_text_input += static_cast<wchar_t>(details.wParam);
+		vrinput->_text_input += static_cast<wchar_t>(details.wParam);
 		break;
 	case WM_KEYDOWN:
 	case WM_SYSKEYDOWN:
@@ -222,6 +235,8 @@ bool reshade::input::handle_window_message(const void *message_data)
 		input->_keys_time[details.wParam] = details.time;
 		if (input->_block_keyboard)
 			input->_keys[details.wParam] |= 0x04;
+		vrinput->_keys[details.wParam] = 0x88;
+		vrinput->_keys_time[details.wParam] = details.time;
 		break;
 	case WM_KEYUP:
 	case WM_SYSKEYUP:
@@ -231,6 +246,8 @@ bool reshade::input::handle_window_message(const void *message_data)
 			is_keyboard_message = false;
 		input->_keys[details.wParam] = 0x08;
 		input->_keys_time[details.wParam] = details.time;
+		vrinput->_keys[details.wParam] = 0x08;
+		vrinput->_keys_time[details.wParam] = details.time;
 		break;
 	case WM_LBUTTONDOWN:
 	case WM_LBUTTONDBLCLK: // Double clicking generates this sequence: WM_LBUTTONDOWN -> WM_LBUTTONUP -> WM_LBUTTONDBLCLK -> WM_LBUTTONUP, so handle it like a normal down
@@ -463,7 +480,7 @@ static inline bool is_blocking_mouse_input()
 	const std::shared_lock<std::shared_mutex> lock(s_windows_mutex);
 
 	const auto predicate = [](const auto &input_window) {
-		return !input_window.second.expired() && input_window.second.lock()->is_blocking_mouse_input();
+		return !input_window.second.first.expired() && input_window.second.first.lock()->is_blocking_mouse_input();
 	};
 	return std::any_of(s_windows.cbegin(), s_windows.cend(), predicate);
 }
@@ -472,7 +489,7 @@ static inline bool is_blocking_keyboard_input()
 	const std::shared_lock<std::shared_mutex> lock(s_windows_mutex);
 
 	const auto predicate = [](const auto &input_window) {
-		return !input_window.second.expired() && input_window.second.lock()->is_blocking_keyboard_input();
+		return !input_window.second.first.expired() && input_window.second.first.lock()->is_blocking_keyboard_input();
 	};
 	return std::any_of(s_windows.cbegin(), s_windows.cend(), predicate);
 }

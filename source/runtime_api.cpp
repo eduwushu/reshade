@@ -911,7 +911,7 @@ bool reshade::runtime::get_preprocessor_definition(const char *name, char *value
 			return true;
 		}
 	}
-	for (auto global_it = _global_preprocessor_definitions.begin(); global_it != _global_preprocessor_definitions.end(); ++global_it)
+	for (auto global_it = _config._global_preprocessor_definitions.begin(); global_it != _config._global_preprocessor_definitions.end(); ++global_it)
 	{
 		const size_t equals_index = global_it->find('=');
 		if (equals_index != std::string::npos && name == global_it->substr(0, equals_index))
