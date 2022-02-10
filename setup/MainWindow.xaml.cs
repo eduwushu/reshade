@@ -230,11 +230,6 @@ namespace ReShade.Setup
 				appPage.PathBox.TextChanged += (sender2, e2) => NextButton.IsEnabled = !string.IsNullOrEmpty(appPage.FileName) && Path.GetExtension(appPage.FileName).Equals(".exe", StringComparison.OrdinalIgnoreCase) && File.Exists(appPage.FileName);
 
 				ResetStatus();
-
-				if (!signed)
-				{
-					MessageBox.Show("This build of ReShade is intended for singleplayer games only and may cause bans in multiplayer games.", "Warning", MessageBoxButton.OK, MessageBoxImage.Exclamation);
-				}
 			}
 		}
 

@@ -637,7 +637,10 @@ void reshade::runtime::on_present()
 
 			// Continuously update preset values while a transition is in progress
 			if (_is_in_between_presets_transition)
+			{
 				load_current_preset();
+				_vr_needs_preset_reload = true;
+			}
 		}
 #endif
 	}
@@ -755,7 +758,6 @@ void reshade::runtime::load_config()
 		config.get("SCREENSHOT", "PostSaveCommandWorkingDirectory", _config._screenshot_post_save_command_working_directory);
 		config.get("SCREENSHOT", "PostSaveCommandNoWindow", _config._screenshot_post_save_command_no_window);
 		_config_loaded = true;
-		_is_config_owner = true;
 	}
 
 #if RESHADE_GUI
@@ -1052,6 +1054,9 @@ void reshade::runtime::save_current_preset() const
 
 bool reshade::runtime::switch_to_next_preset(std::filesystem::path filter_path, bool reversed)
 {
+	if (!_is_config_owner)
+		return false;
+
 	std::error_code ec; // This is here to ignore file system errors below
 
 	std::filesystem::path filter_text;

@@ -55,6 +55,7 @@ bool reshade::d3d11::swapchain_impl::on_init()
 		return false;
 
 	HWnd = swap_desc.OutputWindow;
+	_is_config_owner = true;
 
 	// Get back buffer texture
 	if (FAILED(_orig->GetBuffer(0, IID_PPV_ARGS(&_backbuffer))))

@@ -69,6 +69,7 @@ bool reshade::d3d12::swapchain_impl::on_init()
 		return false;
 
 	HWnd = swap_desc.OutputWindow;
+	_is_config_owner = true;
 
 	// Update window handle in swap chain description for UWP applications
 	if (HWND hwnd = nullptr; SUCCEEDED(_orig->GetHwnd(&hwnd)))
